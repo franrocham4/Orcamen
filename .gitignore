@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Django
+*.log
+db.sqlite3
+controle_pagamento/db.sqlite3
+*.sqlite3
+staticfiles/
+controle_pagamento/staticfiles/
+
+# Environment
+.env
+controle_pagamento/.env
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/
+*.egg-info/
