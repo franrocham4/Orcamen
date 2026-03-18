@@ -1,0 +1,74 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: orcamen
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             python manage.py seed_excel &&
+             START_WATCHER=true python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+      - ${WATCH_FOLDER:-./data}:/watch_folder
+    ports:
+      - "8000:8000"
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/orcamen
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - WATCH_FOLDER=/watch_folder
+      - EXCEL_FILENAME=${EXCEL_FILENAME:-CONTROLE DE PAGAMENTO 2025.xlsm}
+      - DEBUG=${DEBUG:-True}
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery:
+    build: .
+    command: celery -A config worker -l info -c 2
+    volumes:
+      - .:/app
+      - ${WATCH_FOLDER:-./data}:/watch_folder
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/orcamen
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - WATCH_FOLDER=/watch_folder
+      - EXCEL_FILENAME=${EXCEL_FILENAME:-CONTROLE DE PAGAMENTO 2025.xlsm}
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
+    depends_on:
+      - redis
+      - db
+
+volumes:
+  postgres_data:
