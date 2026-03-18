@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Orcamen - Controle de Pagamento{% endblock %}</title>
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- DataTables -->
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-width: 250px;
+            --primary: #1a3a5c;
+            --accent: #2196f3;
+        }
+        body { background: #f0f4f8; }
+        .sidebar {
+            width: var(--sidebar-width);
+            min-height: 100vh;
+            background: var(--primary);
+            position: fixed;
+            top: 0; left: 0;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar-brand {
+            padding: 1.5rem 1rem;
+            background: rgba(0,0,0,0.2);
+            color: #fff;
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.8);
+            padding: 0.7rem 1.2rem;
+            border-radius: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .sidebar .nav-link:hover, .sidebar .nav-link.active {
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+        }
+        .main-content {
+            margin-left: var(--sidebar-width);
+            min-height: 100vh;
+        }
+        .topbar {
+            background: #fff;
+            border-bottom: 1px solid #dee2e6;
+            padding: 0.8rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+        .stat-card {
+            border-radius: 12px;
+            border: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        }
+        .badge-status-success { background: #28a745; }
+        .badge-status-error   { background: #dc3545; }
+        .badge-status-running { background: #fd7e14; }
+        .badge-status-pending { background: #6c757d; }
+        .sync-indicator {
+            display: inline-block;
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        .sync-success { background: #28a745; }
+        .sync-error   { background: #dc3545; }
+        .sync-running { background: #fd7e14; animation: pulse 1s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        .table-responsive { border-radius: 8px; overflow: hidden; }
+        {% block extra_css %}{% endblock %}
+    </style>
+</head>
+<body>
+<!-- Sidebar -->
+<nav class="sidebar">
+    <div class="sidebar-brand">
+        <i class="bi bi-table"></i> Orcamen
+        <div style="font-size:0.75rem;font-weight:400;opacity:0.7">Controle de Pagamento 2025</div>
+    </div>
+    <div class="mt-2">
+        <a href="{% url 'dashboard:dashboard' %}" class="nav-link">
+            <i class="bi bi-speedometer2"></i> Dashboard
+        </a>
+        <a href="{% url 'dashboard:sheets_list' %}" class="nav-link">
+            <i class="bi bi-grid-3x3-gap"></i> Abas da Planilha
+        </a>
+        <hr style="border-color:rgba(255,255,255,0.2);margin:0.5rem 1rem;">
+        <a href="/api/" class="nav-link" target="_blank">
+            <i class="bi bi-code-square"></i> API REST
+        </a>
+        <a href="/admin/" class="nav-link" target="_blank">
+            <i class="bi bi-gear"></i> Admin
+        </a>
+    </div>
+    <div class="mt-auto p-3" style="font-size:0.72rem;color:rgba(255,255,255,0.4)">
+        Sync: <span id="sidebar-sync-status">—</span>
+    </div>
+</nav>
+
+<div class="main-content">
+    <!-- Topbar -->
+    <div class="topbar">
+        <div>
+            <span style="color:#888;font-size:0.9rem">{% block breadcrumb %}{% endblock %}</span>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <span id="sync-badge" class="badge bg-secondary">Verificando...</span>
+            <button class="btn btn-sm btn-primary" id="btn-sync" onclick="triggerSync()">
+                <i class="bi bi-arrow-clockwise"></i> Sincronizar Agora
+            </button>
+        </div>
+    </div>
+
+    <!-- Messages -->
+    {% if messages %}
+    <div class="container-fluid px-4 pt-3">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Main content -->
+    <div class="container-fluid px-4 py-3">
+        {% block content %}{% endblock %}
+    </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script>
+// Polling for sync status every 5 seconds
+function updateSyncStatus() {
+    fetch('/dashboard/sync-status/')
+        .then(r => r.json())
+        .then(data => {
+            const badge = document.getElementById('sync-badge');
+            const sidebar = document.getElementById('sidebar-sync-status');
+            if (!badge) return;
+            const map = {
+                'success': ['bg-success', 'Sincronizado'],
+                'error':   ['bg-danger',  'Erro'],
+                'running': ['bg-warning text-dark', 'Processando...'],
+                'pending': ['bg-secondary', 'Pendente'],
+                'none':    ['bg-secondary', 'Sem dados'],
+            };
+            const [cls, label] = map[data.status] || ['bg-secondary', data.status];
+            badge.className = 'badge ' + cls;
+            badge.textContent = label;
+            if (sidebar) sidebar.textContent = label;
+        })
+        .catch(() => {});
+}
+
+function triggerSync() {
+    const btn = document.getElementById('btn-sync');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i> Sincronizando...';
+
+    fetch('/dashboard/sincronizar/', {method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')}})
+        .then(r => r.json())
+        .then(data => {
+            const msg = data.message || data.error || 'Concluído';
+            showToast(msg, data.error ? 'danger' : 'success');
+            setTimeout(() => location.reload(), 2000);
+        })
+        .catch(e => showToast('Erro: ' + e, 'danger'))
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Sincronizar Agora';
+        });
+}
+
+function getCookie(name) {
+    let val = null;
+    if (document.cookie) {
+        document.cookie.split(';').forEach(c => {
+            c = c.trim();
+            if (c.startsWith(name + '=')) val = decodeURIComponent(c.slice(name.length + 1));
+        });
+    }
+    return val;
+}
+
+function showToast(msg, type) {
+    const div = document.createElement('div');
+    div.className = `alert alert-${type} position-fixed bottom-0 end-0 m-3 shadow`;
+    div.style.zIndex = 9999;
+    div.textContent = msg;
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 4000);
+}
+
+updateSyncStatus();
+setInterval(updateSyncStatus, 5000);
+</script>
+<style>.spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }</style>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

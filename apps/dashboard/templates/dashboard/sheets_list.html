@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Abas da Planilha - Orcamen{% endblock %}
+{% block breadcrumb %}Abas da Planilha{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0"><i class="bi bi-grid-3x3-gap"></i> Abas da Planilha</h4>
+    <div>
+        <select class="form-select form-select-sm d-inline-block w-auto" onchange="location.href='?file='+this.value">
+            <option value="">Todos os arquivos</option>
+            {% for f in files %}
+            <option value="{{ f.id }}" {% if selected_file and selected_file.id == f.id %}selected{% endif %}>
+                {{ f.filename }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+</div>
+
+<div class="row g-3">
+{% for sheet in sheets %}
+<div class="col-md-4 col-lg-3">
+    <a href="{% url 'dashboard:sheet_detail' sheet.id %}" class="text-decoration-none">
+        <div class="card h-100 shadow-sm hover-shadow">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <i class="bi bi-table text-primary fs-3"></i>
+                        <h6 class="mt-2 mb-1">{{ sheet.name }}</h6>
+                        <small class="text-muted">{{ sheet.excel_file.filename }}</small>
+                    </div>
+                    <span class="badge bg-primary rounded-pill">{{ sheet.row_count }}</span>
+                </div>
+                <hr class="my-2">
+                <div class="d-flex justify-content-between text-muted small">
+                    <span><i class="bi bi-columns"></i> {{ sheet.col_count }} colunas</span>
+                    <span><i class="bi bi-list-ol"></i> {{ sheet.row_count }} linhas</span>
+                </div>
+            </div>
+        </div>
+    </a>
+</div>
+{% empty %}
+<div class="col-12">
+    <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-inbox fs-1 text-muted"></i>
+            <p class="mt-3">Nenhuma aba encontrada. Sincronize a planilha primeiro.</p>
+            <button class="btn btn-primary" onclick="triggerSync()">
+                <i class="bi bi-arrow-clockwise"></i> Sincronizar Agora
+            </button>
+        </div>
+    </div>
+</div>
+{% endfor %}
+</div>
+{% endblock %}

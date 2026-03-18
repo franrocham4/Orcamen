@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Controle de Pagamento 2025{% endblock %}
+{% block breadcrumb %}Dashboard{% endblock %}
+
+{% block content %}
+<h4 class="mb-4"><i class="bi bi-speedometer2"></i> Dashboard</h4>
+
+<!-- Stats Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card stat-card p-3 text-center">
+            <div class="fs-1 fw-bold text-primary">{{ total_files }}</div>
+            <div class="text-muted small">Arquivo(s) Excel</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card stat-card p-3 text-center">
+            <div class="fs-1 fw-bold text-success">{{ total_sheets }}</div>
+            <div class="text-muted small">Abas (Sheets)</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card stat-card p-3 text-center">
+            <div class="fs-1 fw-bold text-info">{{ total_rows }}</div>
+            <div class="text-muted small">Linhas de Dados</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card stat-card p-3 text-center">
+            <div class="fs-1 fw-bold {% if error_syncs > 0 %}text-danger{% else %}text-secondary{% endif %}">{{ error_syncs }}</div>
+            <div class="text-muted small">Erros de Sync</div>
+        </div>
+    </div>
+</div>
+
+<!-- Watch folder info -->
+<div class="alert alert-info d-flex align-items-center gap-2 mb-4">
+    <i class="bi bi-folder-check fs-5"></i>
+    <div>
+        <strong>Pasta Monitorada:</strong> {{ watch_folder }}<br>
+        <small class="text-muted">Arquivo principal: <strong>{{ excel_filename }}</strong></small>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Files + Sheets -->
+    <div class="col-md-7">
+        {% if files %}
+        {% for f in files %}
+        <div class="card mb-3 shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="bi bi-file-earmark-spreadsheet text-success"></i>
+                    <strong>{{ f.filename }}</strong>
+                </div>
+                <span class="badge bg-light text-dark">{{ f.file_size|filesizeformat }}</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Aba</th>
+                                <th class="text-center">Colunas</th>
+                                <th class="text-center">Linhas</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for sheet in f.sheets.all %}
+                        <tr>
+                            <td>
+                                <i class="bi bi-table text-primary"></i>
+                                {{ sheet.name }}
+                            </td>
+                            <td class="text-center">{{ sheet.col_count }}</td>
+                            <td class="text-center">{{ sheet.row_count }}</td>
+                            <td>
+                                <a href="{% url 'dashboard:sheet_detail' sheet.id %}" class="btn btn-xs btn-outline-primary btn-sm py-0 px-2">Ver</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-muted text-center">Nenhuma aba processada ainda.</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer text-muted small">
+                Atualizado: {{ f.processed_at|date:"d/m/Y H:i" }}
+                {% if f.last_modified %}| Arquivo: {{ f.last_modified|date:"d/m/Y H:i" }}{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="card shadow-sm">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-cloud-download fs-1 text-muted"></i>
+                <p class="mt-3 mb-2">Nenhuma planilha sincronizada ainda.</p>
+                <button class="btn btn-primary" onclick="triggerSync()">
+                    <i class="bi bi-arrow-clockwise"></i> Sincronizar Agora
+                </button>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Sync History -->
+    <div class="col-md-5">
+        <div class="card shadow-sm">
+            <div class="card-header"><i class="bi bi-clock-history"></i> Histórico de Sincronizações</div>
+            <div class="card-body p-0">
+                <div style="max-height:400px;overflow-y:auto">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>Status</th>
+                                <th>Gatilho</th>
+                                <th>Abas</th>
+                                <th>Linhas</th>
+                                <th>Quando</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for sync in recent_syncs %}
+                        <tr>
+                            <td>
+                                <span class="badge badge-status-{{ sync.status }}">
+                                    {{ sync.get_status_display }}
+                                </span>
+                            </td>
+                            <td><small>{{ sync.trigger }}</small></td>
+                            <td>{{ sync.sheets_processed }}</td>
+                            <td>{{ sync.rows_processed }}</td>
+                            <td><small>{{ sync.started_at|date:"d/m H:i" }}</small></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="text-muted text-center p-3">Sem histórico ainda</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="card mt-3 shadow-sm">
+            <div class="card-header"><i class="bi bi-bar-chart"></i> Linhas por Aba</div>
+            <div class="card-body">
+                <canvas id="sheetsChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Build chart from sheets data
+fetch('/api/sheets/')
+    .then(r => r.json())
+    .then(data => {
+        const results = data.results || data;
+        if (!results || !results.length) return;
+        const labels = results.map(s => s.name);
+        const values = results.map(s => s.row_count);
+        const colors = labels.map((_, i) => `hsl(${(i * 47) % 360},65%,55%)`);
+
+        new Chart(document.getElementById('sheetsChart'), {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Linhas',
+                    data: values,
+                    backgroundColor: colors,
+                    borderRadius: 6,
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+            }
+        });
+    })
+    .catch(() => {});
+</script>
+{% endblock %}
