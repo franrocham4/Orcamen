@@ -53,10 +53,17 @@ def parse_decimal(valor):
 
     texto = str(valor).strip()
     texto = re.sub(r'[R$\s]', '', texto)
+    # Brazilian format: 1.234,56 → remove thousand-sep dots, replace comma decimal
     if re.match(r'^\d{1,3}(\.\d{3})*,\d{2}$', texto):
         texto = texto.replace('.', '').replace(',', '.')
+    elif ',' in texto:
+        # Other comma-decimal format (e.g. 1234,56): replace comma with dot
+        texto = texto.replace(',', '.')
     else:
-        texto = texto.replace('.', '').replace(',', '.') if ',' in texto else texto.replace('.', '', texto.count('.') - 1)
+        # Remove all but the last dot (handles accidental extra dots)
+        dot_count = texto.count('.')
+        if dot_count > 1:
+            texto = texto.replace('.', '', dot_count - 1)
     try:
         return Decimal(texto)
     except (InvalidOperation, ValueError):
@@ -131,7 +138,7 @@ def processar_aba(df, nome_aba):
 
         for campo, coluna in mapeamento.items():
             valor_bruto = row.get(coluna)
-            if pd.isna(valor_bruto) if hasattr(pd, 'isna') else valor_bruto is None:
+            if pd.isna(valor_bruto):
                 pagamento_dict[campo] = None
                 continue
 

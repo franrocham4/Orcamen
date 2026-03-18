@@ -162,8 +162,9 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ por_mes|json_script:"por-mes-data" }}
 <script>
-const porMes = {{ por_mes|safe }};
+const porMes = JSON.parse(document.getElementById('por-mes-data').textContent);
 const contagens = {
     pago: {{ count_pago }},
     pendente: {{ count_pendente }},

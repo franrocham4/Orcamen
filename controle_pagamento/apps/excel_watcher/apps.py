@@ -13,6 +13,8 @@ class ExcelWatcherConfig(AppConfig):
     verbose_name = 'Excel Watcher'
 
     def ready(self):
+        # Guard against double-start: Django's autoreloader spawns a child process
+        # with RUN_MAIN=true; only start the watcher in that child process.
         if os.environ.get('RUN_MAIN') != 'true':
             return
 

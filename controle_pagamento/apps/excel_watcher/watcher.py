@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 _observer = None
 _debounce_timer = None
 _lock = threading.Lock()
+DEBOUNCE_DELAY_SECONDS = 3.0
 
 
 def _importar_em_thread(caminho_arquivo):
@@ -59,7 +60,7 @@ class ExcelFileHandler(FileSystemEventHandler):
         with _lock:
             if _debounce_timer:
                 _debounce_timer.cancel()
-            _debounce_timer = threading.Timer(3.0, _importar_em_thread, args=[caminho])
+            _debounce_timer = threading.Timer(DEBOUNCE_DELAY_SECONDS, _importar_em_thread, args=[caminho])
             _debounce_timer.daemon = True
             _debounce_timer.start()
 
