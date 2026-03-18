@@ -1,0 +1,185 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Controle de Pagamento{% endblock %}
+
+{% block content %}
+<div class="px-2">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 fw-bold"><i class="bi bi-speedometer2"></i> Dashboard</h1>
+        {% if ultima_importacao %}
+        <small class="text-muted">
+            <i class="bi bi-clock"></i>
+            Última importação: {{ ultima_importacao.data|slice:":19" }}
+            {% if ultima_importacao.sucesso %}
+                <span class="badge bg-success">✅ {{ ultima_importacao.registros }} registros</span>
+            {% else %}
+                <span class="badge bg-danger">❌ Falhou</span>
+            {% endif %}
+        </small>
+        {% endif %}
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100 bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="card-text small opacity-75">Total Registros</p>
+                            <h3 class="fw-bold mb-0">{{ total_registros }}</h3>
+                        </div>
+                        <i class="bi bi-file-earmark-text fs-1 opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100 bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="card-text small opacity-75">Total Pago</p>
+                            <h4 class="fw-bold mb-0">R$ {{ total_pago|floatformat:2 }}</h4>
+                            <small class="opacity-75">{{ count_pago }} pagamentos</small>
+                        </div>
+                        <i class="bi bi-check-circle fs-1 opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100 bg-warning text-dark">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="card-text small opacity-75">Total Pendente</p>
+                            <h4 class="fw-bold mb-0">R$ {{ total_pendente|floatformat:2 }}</h4>
+                            <small class="opacity-75">{{ count_pendente }} pendentes, {{ count_atrasado }} atrasados</small>
+                        </div>
+                        <i class="bi bi-hourglass-split fs-1 opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100 bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="card-text small opacity-75">Total Geral</p>
+                            <h4 class="fw-bold mb-0">R$ {{ total_valor|floatformat:2 }}</h4>
+                            <small class="opacity-75">{{ count_cancelado }} cancelados</small>
+                        </div>
+                        <i class="bi bi-currency-dollar fs-1 opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white fw-semibold">
+                    <i class="bi bi-bar-chart"></i> Pagamentos por Mês
+                </div>
+                <div class="card-body">
+                    <canvas id="chartMes" height="120"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white fw-semibold">
+                    <i class="bi bi-pie-chart"></i> Por Status
+                </div>
+                <div class="card-body">
+                    <canvas id="chartStatus" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent payments table -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span class="fw-semibold"><i class="bi bi-clock-history"></i> Últimos Pagamentos</span>
+            <a href="{% url 'pagamentos:lista' %}" class="btn btn-sm btn-outline-primary">Ver todos</a>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nome</th>
+                            <th>Valor</th>
+                            <th>Status</th>
+                            <th>Vencimento</th>
+                            <th>Mês</th>
+                            <th>Categoria</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in ultimos_pagamentos %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'pagamentos:detalhe' p.id %}">
+                                    {{ p.nome|default:"-" }}
+                                </a>
+                            </td>
+                            <td>R$ {{ p.valor|floatformat:2 }}</td>
+                            <td>
+                                {% if p.status == 'pago' %}
+                                    <span class="badge bg-success">Pago</span>
+                                {% elif p.status == 'atrasado' %}
+                                    <span class="badge bg-danger">Atrasado</span>
+                                {% elif p.status == 'cancelado' %}
+                                    <span class="badge bg-secondary">Cancelado</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark">Pendente</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ p.data_vencimento|default:"-" }}</td>
+                            <td>{{ p.mes_referencia|default:"-" }}</td>
+                            <td>{{ p.categoria|default:"-" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                                Nenhum pagamento encontrado. Configure o EXCEL_FILE_PATH no .env.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const porMes = {{ por_mes|safe }};
+const contagens = {
+    pago: {{ count_pago }},
+    pendente: {{ count_pendente }},
+    atrasado: {{ count_atrasado }},
+    cancelado: {{ count_cancelado }},
+};
+initDashboardCharts(porMes, contagens);
+
+// WebSocket para atualizações em tempo real
+const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/dashboard/`);
+ws.onmessage = function(e) {
+    const data = JSON.parse(e.data);
+    if (data.type === 'excel_updated') {
+        location.reload();
+    }
+};
+</script>
+{% endblock %}

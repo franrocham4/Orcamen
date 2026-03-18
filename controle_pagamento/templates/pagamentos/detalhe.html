@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ pagamento.nome|default:"Pagamento" }} - Detalhe{% endblock %}
+
+{% block content %}
+<div class="px-2">
+    <div class="d-flex align-items-center mb-4 gap-3">
+        <a href="{% url 'pagamentos:lista' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+        <h1 class="h3 fw-bold mb-0">
+            <i class="bi bi-receipt"></i>
+            {{ pagamento.nome|default:"Sem nome" }}
+        </h1>
+        {% if pagamento.status == 'pago' %}
+            <span class="badge bg-success fs-6">Pago</span>
+        {% elif pagamento.status == 'atrasado' %}
+            <span class="badge bg-danger fs-6">Atrasado</span>
+        {% elif pagamento.status == 'cancelado' %}
+            <span class="badge bg-secondary fs-6">Cancelado</span>
+        {% else %}
+            <span class="badge bg-warning text-dark fs-6">Pendente</span>
+        {% endif %}
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white fw-semibold">
+                    <i class="bi bi-info-circle"></i> Informações Gerais
+                </div>
+                <div class="card-body">
+                    <table class="table table-borderless mb-0">
+                        <tr>
+                            <th class="text-muted w-40">Nome</th>
+                            <td>{{ pagamento.nome|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Fornecedor</th>
+                            <td>{{ pagamento.fornecedor|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Descrição</th>
+                            <td>{{ pagamento.descricao|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Referência</th>
+                            <td>{{ pagamento.referencia|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Categoria</th>
+                            <td>{{ pagamento.categoria|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Responsável</th>
+                            <td>{{ pagamento.responsavel|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Nota Fiscal</th>
+                            <td>{{ pagamento.numero_nf|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Banco</th>
+                            <td>{{ pagamento.banco|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Forma Pagamento</th>
+                            <td>{{ pagamento.forma_pagamento|default:"-" }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white fw-semibold">
+                    <i class="bi bi-currency-dollar"></i> Valores e Datas
+                </div>
+                <div class="card-body">
+                    <table class="table table-borderless mb-0">
+                        <tr>
+                            <th class="text-muted w-40">Valor</th>
+                            <td class="fw-bold text-primary fs-5">
+                                {% if pagamento.valor %}R$ {{ pagamento.valor|floatformat:2 }}{% else %}-{% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Valor Pago</th>
+                            <td class="text-success">
+                                {% if pagamento.valor_pago %}R$ {{ pagamento.valor_pago|floatformat:2 }}{% else %}-{% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Valor Pendente</th>
+                            <td class="text-warning">
+                                {% if pagamento.valor_pendente %}R$ {{ pagamento.valor_pendente|floatformat:2 }}{% else %}-{% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Vencimento</th>
+                            <td>{{ pagamento.data_vencimento|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Data Pagamento</th>
+                            <td>{{ pagamento.data_pagamento|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Mês Referência</th>
+                            <td>{{ pagamento.mes_referencia|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Competência</th>
+                            <td>{{ pagamento.competencia|default:"-" }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white fw-semibold">
+                    <i class="bi bi-file-earmark-excel"></i> Planilha
+                </div>
+                <div class="card-body">
+                    <table class="table table-borderless mb-0">
+                        <tr>
+                            <th class="text-muted w-40">Aba</th>
+                            <td>{{ pagamento.aba_planilha }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Linha</th>
+                            <td>{{ pagamento.linha_planilha|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Importado em</th>
+                            <td>{{ pagamento.criado_em|date:"d/m/Y H:i" }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {% if pagamento.observacoes %}
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white fw-semibold">
+                    <i class="bi bi-chat-text"></i> Observações
+                </div>
+                <div class="card-body">
+                    {{ pagamento.observacoes|linebreaks }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if pagamento.dados_extras %}
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white fw-semibold">
+                    <i class="bi bi-three-dots"></i> Dados Extras da Planilha
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light">
+                            <tr><th>Coluna</th><th>Valor</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for key, val in pagamento.dados_extras.items %}
+                            <tr>
+                                <td class="text-muted">{{ key }}</td>
+                                <td>{{ val }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
