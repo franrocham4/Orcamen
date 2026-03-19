@@ -121,20 +121,22 @@ class ExcelFileHandler(FileSystemEventHandler):
         """Handle deletion of an Excel file from the watched folder."""
         filename = os.path.basename(filepath)
         logger.info(f'Detected deletion of Excel file: {filepath}')
+        # Always remove the record from the database immediately (do not rely solely on
+        # Celery, because the worker may not be running even when Redis/Celery is configured).
+        try:
+            from .processors import desativar_arquivo
+            desativar_arquivo(filepath)
+            print(f'✅ {filename} removido do sistema')
+        except Exception as e:
+            logger.error(f'Inline deletion failed: {e}')
+            print(f'❌ Erro ao remover {filename}: {e}')
+        # Additionally queue a Celery task so distributed workers stay in sync.
         try:
             from .tasks import desativar_arquivo_task
             desativar_arquivo_task.delay(filepath)
             logger.info(f'Queued deletion task for: {filepath}')
         except Exception:
-            # Celery/Redis not available — process inline
-            logger.warning('Celery unavailable, deactivating file inline...')
-            try:
-                from .processors import desativar_arquivo
-                desativar_arquivo(filepath)
-                print(f'✅ {filename} removido do sistema')
-            except Exception as e:
-                logger.error(f'Inline deactivation failed: {e}')
-                print(f'❌ Erro ao remover {filename}: {e}')
+            pass  # Celery not available — inline deletion above already handled it
 
     def on_created(self, event):
         if not event.is_directory and self._is_excel(event.src_path):
@@ -199,19 +201,19 @@ def _sincronizar_pasta_no_inicio(folder: str):
             return
 
         # Deactivate DB records whose file no longer exists on disk
-        active_files = ExcelFile.objects.filter(is_active=True)
-        for excel_file in active_files:
+        all_files = ExcelFile.objects.all()
+        for excel_file in all_files:
             if excel_file.filepath not in disk_files:
-                logger.info(f'Startup: file no longer on disk, deactivating: {excel_file.filepath}')
+                logger.info(f'Startup: file no longer on disk, deleting: {excel_file.filepath}')
                 desativar_arquivo(excel_file.filepath)
 
         # Process files on disk that are new, inactive, or modified since last sync
         from datetime import datetime, timezone as dt_timezone
         for full_path in disk_files:
-            excel_file = ExcelFile.objects.filter(filepath=full_path, is_active=True).first()
+            excel_file = ExcelFile.objects.filter(filepath=full_path).first()
             needs_processing = False
             if not excel_file:
-                logger.info(f'Startup: new/inactive file found on disk, processing: {full_path}')
+                logger.info(f'Startup: new file found on disk, processing: {full_path}')
                 needs_processing = True
             else:
                 try:
