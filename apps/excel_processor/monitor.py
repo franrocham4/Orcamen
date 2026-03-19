@@ -205,11 +205,28 @@ def _sincronizar_pasta_no_inicio(folder: str):
                 logger.info(f'Startup: file no longer on disk, deactivating: {excel_file.filepath}')
                 desativar_arquivo(excel_file.filepath)
 
-        # Process files on disk that are not yet in DB (or inactive)
+        # Process files on disk that are new, inactive, or modified since last sync
+        from datetime import datetime, timezone as dt_timezone
         for full_path in disk_files:
-            exists_active = ExcelFile.objects.filter(filepath=full_path, is_active=True).exists()
-            if not exists_active:
+            excel_file = ExcelFile.objects.filter(filepath=full_path, is_active=True).first()
+            needs_processing = False
+            if not excel_file:
                 logger.info(f'Startup: new/inactive file found on disk, processing: {full_path}')
+                needs_processing = True
+            else:
+                try:
+                    file_mtime = datetime.fromtimestamp(
+                        os.stat(full_path).st_mtime, tz=dt_timezone.utc
+                    )
+                    if file_mtime > excel_file.processed_at:
+                        logger.info(
+                            f'Startup: file modified since last sync, reprocessing: {full_path}'
+                        )
+                        needs_processing = True
+                except OSError:
+                    pass
+
+            if needs_processing:
                 try:
                     ProcessadorExcel(full_path).processar()
                 except Exception as e:

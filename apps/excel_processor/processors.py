@@ -99,6 +99,8 @@ class ProcessadorExcel:
         total_sheets = 0
         total_rows = 0
 
+        current_sheet_names = set(wb.sheetnames)
+
         for sheet_index, sheet_name in enumerate(wb.sheetnames):
             ws = wb[sheet_name]
             rows_data, headers = self._extract_sheet_data(ws)
@@ -126,6 +128,13 @@ class ProcessadorExcel:
             total_sheets += 1
             total_rows += len(rows_data)
             logger.info(f'  Sheet "{sheet_name}": {len(rows_data)} rows')
+
+        # Remove sheets that no longer exist in the workbook
+        deleted_count, _ = ExcelSheet.objects.filter(excel_file=excel_file).exclude(
+            name__in=current_sheet_names
+        ).delete()
+        if deleted_count:
+            logger.info(f'  Removed {deleted_count} stale sheet(s) no longer in workbook')
 
         logger.info(f'Done: {total_sheets} sheets, {total_rows} rows')
         return {

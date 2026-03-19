@@ -157,6 +157,11 @@
 
 {% block extra_js %}
 <script>
+// Auto-refresh every 5 seconds so the dashboard shows up-to-date data
+setInterval(function() {
+    location.reload();
+}, 5000);
+
 // Build chart from sheets data
 fetch('/api/sheets/')
     .then(r => r.json())
