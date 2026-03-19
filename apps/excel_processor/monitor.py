@@ -65,6 +65,22 @@ class ExcelFileHandler(FileSystemEventHandler):
             except Exception as e:
                 logger.error(f'Inline processing failed: {e}')
 
+    def _dispatch_deleted(self, filepath: str):
+        """Handle deletion of an Excel file from the watched folder."""
+        logger.info(f'Detected deletion of Excel file: {filepath}')
+        try:
+            from .tasks import desativar_arquivo_task
+            desativar_arquivo_task.delay(filepath)
+            logger.info(f'Queued deletion task for: {filepath}')
+        except Exception:
+            # Celery/Redis not available — process inline
+            logger.warning('Celery unavailable, deactivating file inline...')
+            try:
+                from .processors import desativar_arquivo
+                desativar_arquivo(filepath)
+            except Exception as e:
+                logger.error(f'Inline deactivation failed: {e}')
+
     def on_created(self, event):
         if not event.is_directory and self._is_excel(event.src_path):
             self._schedule(event.src_path)
@@ -73,9 +89,76 @@ class ExcelFileHandler(FileSystemEventHandler):
         if not event.is_directory and self._is_excel(event.src_path):
             self._schedule(event.src_path)
 
+    def on_deleted(self, event):
+        if not event.is_directory and self._is_excel(event.src_path):
+            self._dispatch_deleted(event.src_path)
+
     def on_moved(self, event):
-        if not event.is_directory and self._is_excel(event.dest_path):
-            self._schedule(event.dest_path)
+        if not event.is_directory:
+            old_is_excel = self._is_excel(event.src_path)
+            new_is_excel = self._is_excel(event.dest_path)
+
+            if old_is_excel and not new_is_excel:
+                # Renamed to a non-Excel extension — treat as deletion
+                self._dispatch_deleted(event.src_path)
+            elif old_is_excel and new_is_excel:
+                # Renamed to another Excel filename — deactivate old, process new
+                self._dispatch_deleted(event.src_path)
+                self._schedule(event.dest_path)
+            elif new_is_excel:
+                # Non-Excel renamed to Excel — treat as addition
+                self._schedule(event.dest_path)
+
+
+def _sincronizar_pasta_no_inicio(folder: str):
+    """
+    On startup: reconcile the database with the actual folder contents.
+    - Files on disk but not in DB → process them.
+    - Files in DB (active) but not on disk → deactivate them.
+    """
+    import django
+    # Guard: only run when Django ORM is ready
+    if not django.apps.registry.apps.models_ready:
+        logger.warning('Startup folder sync skipped: Django models are not ready yet.')
+        return
+
+    try:
+        from apps.core.models import ExcelFile
+        from .processors import ProcessadorExcel, desativar_arquivo
+
+        # Collect Excel files currently on disk
+        disk_files = {}
+        try:
+            for fname in os.listdir(folder):
+                if (
+                    any(fname.lower().endswith(ext) for ext in EXCEL_EXTENSIONS)
+                    and not fname.startswith('~$')
+                ):
+                    full_path = os.path.join(folder, fname)
+                    disk_files[full_path] = fname
+        except OSError as e:
+            logger.warning(f'Could not list folder {folder}: {e}')
+            return
+
+        # Deactivate DB records whose file no longer exists on disk
+        active_files = ExcelFile.objects.filter(is_active=True)
+        for excel_file in active_files:
+            if excel_file.filepath not in disk_files:
+                logger.info(f'Startup: file no longer on disk, deactivating: {excel_file.filepath}')
+                desativar_arquivo(excel_file.filepath)
+
+        # Process files on disk that are not yet in DB (or inactive)
+        for full_path in disk_files:
+            exists_active = ExcelFile.objects.filter(filepath=full_path, is_active=True).exists()
+            if not exists_active:
+                logger.info(f'Startup: new/inactive file found on disk, processing: {full_path}')
+                try:
+                    ProcessadorExcel(full_path).processar()
+                except Exception as e:
+                    logger.error(f'Startup processing failed for {full_path}: {e}')
+
+    except Exception as e:
+        logger.error(f'Startup folder sync failed: {e}')
 
 
 def iniciar_monitoramento(folder: str = None):
@@ -94,6 +177,9 @@ def iniciar_monitoramento(folder: str = None):
             logger.warning(f'Watch folder does not exist (yet): {folder}')
             # Don't crash — maybe the folder will be created later
             return
+
+        # Reconcile DB with current folder contents before starting the watcher
+        threading.Thread(target=_sincronizar_pasta_no_inicio, args=(folder,), daemon=True).start()
 
         handler = ExcelFileHandler(debounce_seconds=2.0)
         _observer = Observer()

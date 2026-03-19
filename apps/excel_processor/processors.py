@@ -10,6 +10,30 @@ import openpyxl
 logger = logging.getLogger(__name__)
 
 
+def desativar_arquivo(filepath: str):
+    """
+    Mark an ExcelFile record as inactive when the file has been deleted or moved.
+    Records a deletion event in SyncHistory.
+    """
+    from apps.core.models import ExcelFile, SyncHistory
+    from datetime import datetime, timezone
+
+    excel_file = ExcelFile.objects.filter(filepath=filepath, is_active=True).first()
+    if excel_file:
+        excel_file.is_active = False
+        excel_file.save(update_fields=['is_active'])
+        logger.info(f'Deactivated ExcelFile record for deleted file: {filepath}')
+        SyncHistory.objects.create(
+            excel_file=excel_file,
+            status='success',
+            trigger='file_deleted',
+            finished_at=datetime.now(tz=timezone.utc),
+            duration_seconds=0,
+        )
+    else:
+        logger.debug(f'No active ExcelFile record found for deleted path: {filepath}')
+
+
 def _cell_value(value):
     """Convert cell value to JSON-serializable type."""
     if isinstance(value, datetime):

@@ -58,6 +58,16 @@ def processar_excel_task(self, filepath: str, trigger: str = 'auto'):
 
 
 @shared_task
+def desativar_arquivo_task(filepath: str):
+    """
+    Celery task: Deactivate an ExcelFile record when the file is deleted from disk.
+    """
+    from .processors import desativar_arquivo
+    desativar_arquivo(filepath)
+    return {'deactivated': filepath}
+
+
+@shared_task
 def sincronizar_pasta_task(folder_path: str):
     """
     Process all Excel files found in a folder.
