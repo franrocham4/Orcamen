@@ -15,8 +15,10 @@ class ExcelProcessorConfig(AppConfig):
         # command (migrate, shell, …) and should not start the background thread.
         if os.environ.get('RUN_MAIN') == 'true' or os.environ.get('START_WATCHER') == 'true':
             try:
+                from django.conf import settings
                 from .monitor import iniciar_monitoramento
-                iniciar_monitoramento()
+                folder_path = getattr(settings, 'EXCEL_FOLDER_PATH', getattr(settings, 'WATCH_FOLDER', ''))
+                iniciar_monitoramento(folder_path or None)
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).warning(f'Could not start file watcher: {e}')
