@@ -6,6 +6,7 @@ import logging
 import os
 import threading
 import time
+import zipfile
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -13,6 +14,7 @@ from watchdog.observers import Observer
 logger = logging.getLogger(__name__)
 
 EXCEL_EXTENSIONS = ('.xlsx', '.xlsm', '.xls')
+TEMP_EXCEL_PREFIX = '~$'
 
 _observer = None
 _observer_lock = threading.Lock()
@@ -20,6 +22,10 @@ _observer_lock = threading.Lock()
 
 class ExcelFileHandler(FileSystemEventHandler):
     """Handles file system events for Excel files."""
+
+    RETRY_ATTEMPTS = 3
+    RETRY_DELAY = 1.0
+    FILE_CLOSE_DELAY = 2.0
 
     def __init__(self, debounce_seconds: float = 3.0):
         super().__init__()
@@ -29,10 +35,32 @@ class ExcelFileHandler(FileSystemEventHandler):
 
     def _is_excel(self, path: str) -> bool:
         name = os.path.basename(path)
-        return (
-            any(name.lower().endswith(ext) for ext in EXCEL_EXTENSIONS)
-            and not name.startswith('~$')
-        )
+        if not any(name.lower().endswith(ext) for ext in EXCEL_EXTENSIONS):
+            return False
+        if name.startswith(TEMP_EXCEL_PREFIX):
+            print(f'⏭️ Ignorando arquivo temporário: {name}')
+            return False
+        return True
+
+    def _is_file_locked(self, filepath: str) -> bool:
+        """Check if a file is currently locked/in use."""
+        try:
+            with open(filepath, 'rb'):
+                return False
+        except (IOError, OSError):
+            return True
+
+    def _wait_for_file_ready(self, filepath: str) -> bool:
+        """Wait for a file to be ready for reading. Returns True if ready, False on timeout."""
+        for attempt in range(self.RETRY_ATTEMPTS):
+            if not self._is_file_locked(filepath):
+                # Extra pause to ensure the file is fully written before reading
+                time.sleep(self.FILE_CLOSE_DELAY)
+                return True
+            if attempt < self.RETRY_ATTEMPTS - 1:
+                print(f'⏳ Arquivo ainda em uso, aguardando... ({attempt + 1}/{self.RETRY_ATTEMPTS})')
+                time.sleep(self.RETRY_DELAY)
+        return False
 
     def _schedule(self, filepath: str):
         """Debounce: wait a bit before processing to avoid double events."""
@@ -53,20 +81,41 @@ class ExcelFileHandler(FileSystemEventHandler):
     def _dispatch(self, filepath: str):
         filename = os.path.basename(filepath)
         logger.info(f'Detected change in Excel file: {filepath}')
+
+        if not os.path.exists(filepath):
+            logger.warning(f'File no longer exists, skipping: {filepath}')
+            return
+
+        if not self._wait_for_file_ready(filepath):
+            print(f'❌ Timeout: Arquivo ainda está em uso: {filepath}')
+            logger.error(f'Timeout waiting for file to be ready: {filepath}')
+            return
+
         try:
             from .tasks import processar_excel_task
             processar_excel_task.delay(filepath, trigger='watchdog')
             logger.info(f'Queued Celery task for: {filepath}')
         except Exception:
-            # Celery/Redis not available — process inline
+            # Celery/Redis not available — process inline with retry
             logger.warning('Celery unavailable, processing inline...')
-            try:
-                from .processors import ProcessadorExcel
-                ProcessadorExcel(filepath).processar()
-                print(f'✅ {filename} sincronizado com sucesso')
-            except Exception as e:
-                logger.error(f'Inline processing failed: {e}')
-                print(f'❌ Erro ao processar {filename}: {e}')
+            for attempt in range(self.RETRY_ATTEMPTS):
+                try:
+                    from .processors import ProcessadorExcel
+                    ProcessadorExcel(filepath).processar()
+                    print(f'✅ {filename} sincronizado com sucesso')
+                    return
+                except Exception as e:
+                    is_file_error = (
+                        (isinstance(e, ValueError) and 'closed file' in str(e))
+                        or isinstance(e, zipfile.BadZipFile)
+                    )
+                    if is_file_error and attempt < self.RETRY_ATTEMPTS - 1:
+                        print(f'⚠️ Erro ao ler arquivo, tentando novamente ({attempt + 1}/{self.RETRY_ATTEMPTS})')
+                        time.sleep(self.RETRY_DELAY)
+                    else:
+                        logger.error(f'Inline processing failed: {e}')
+                        print(f'❌ Erro ao processar {filename}: {e}')
+                        return
 
     def _dispatch_deleted(self, filepath: str):
         """Handle deletion of an Excel file from the watched folder."""
