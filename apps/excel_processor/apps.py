@@ -9,7 +9,10 @@ class ExcelProcessorConfig(AppConfig):
     def ready(self):
         """Start file watcher when Django is ready (only in main process)."""
         import os
-        # Only start watcher in runserver/gunicorn, not in migrations/management commands
+        # RUN_MAIN=true is set by Django's auto-reloader for the child process.
+        # START_WATCHER=true can be used to force the watcher in other contexts
+        # (e.g. gunicorn). When neither is set we're likely inside a management
+        # command (migrate, shell, …) and should not start the background thread.
         if os.environ.get('RUN_MAIN') == 'true' or os.environ.get('START_WATCHER') == 'true':
             try:
                 from .monitor import iniciar_monitoramento
