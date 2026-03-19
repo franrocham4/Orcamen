@@ -51,6 +51,7 @@ class ExcelFileHandler(FileSystemEventHandler):
         threading.Thread(target=check_and_fire, daemon=True).start()
 
     def _dispatch(self, filepath: str):
+        filename = os.path.basename(filepath)
         logger.info(f'Detected change in Excel file: {filepath}')
         try:
             from .tasks import processar_excel_task
@@ -62,11 +63,14 @@ class ExcelFileHandler(FileSystemEventHandler):
             try:
                 from .processors import ProcessadorExcel
                 ProcessadorExcel(filepath).processar()
+                print(f'✅ {filename} sincronizado com sucesso')
             except Exception as e:
                 logger.error(f'Inline processing failed: {e}')
+                print(f'❌ Erro ao processar {filename}: {e}')
 
     def _dispatch_deleted(self, filepath: str):
         """Handle deletion of an Excel file from the watched folder."""
+        filename = os.path.basename(filepath)
         logger.info(f'Detected deletion of Excel file: {filepath}')
         try:
             from .tasks import desativar_arquivo_task
@@ -78,19 +82,24 @@ class ExcelFileHandler(FileSystemEventHandler):
             try:
                 from .processors import desativar_arquivo
                 desativar_arquivo(filepath)
+                print(f'✅ {filename} removido do sistema')
             except Exception as e:
                 logger.error(f'Inline deactivation failed: {e}')
+                print(f'❌ Erro ao remover {filename}: {e}')
 
     def on_created(self, event):
         if not event.is_directory and self._is_excel(event.src_path):
+            print(f'📥 Planilha ADICIONADA: {event.src_path}')
             self._schedule(event.src_path)
 
     def on_modified(self, event):
         if not event.is_directory and self._is_excel(event.src_path):
+            print(f'✏️  Planilha MODIFICADA: {event.src_path}')
             self._schedule(event.src_path)
 
     def on_deleted(self, event):
         if not event.is_directory and self._is_excel(event.src_path):
+            print(f'🗑️  Planilha REMOVIDA: {event.src_path}')
             self._dispatch_deleted(event.src_path)
 
     def on_moved(self, event):
@@ -171,7 +180,7 @@ def iniciar_monitoramento(folder: str = None):
 
         if folder is None:
             from django.conf import settings
-            folder = getattr(settings, 'WATCH_FOLDER', os.getcwd())
+            folder = getattr(settings, 'EXCEL_FOLDER_PATH', getattr(settings, 'WATCH_FOLDER', os.getcwd()))
 
         if not os.path.isdir(folder):
             logger.warning(f'Watch folder does not exist (yet): {folder}')
@@ -186,6 +195,7 @@ def iniciar_monitoramento(folder: str = None):
         _observer.schedule(handler, folder, recursive=False)
         _observer.daemon = True
         _observer.start()
+        print(f'🟢 Monitorando: {folder}')
         logger.info(f'File watcher started on: {folder}')
 
 

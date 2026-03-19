@@ -95,8 +95,36 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
 # Excel / Monitoramento
-WATCH_FOLDER = config('WATCH_FOLDER', default=str(BASE_DIR))
+# EXCEL_FOLDER_PATH is the canonical env variable; WATCH_FOLDER is a fallback for
+# backwards-compatibility with existing .env files that use the older name.
+EXCEL_FOLDER_PATH = config('EXCEL_FOLDER_PATH', default=config('WATCH_FOLDER', default=str(BASE_DIR)))
+WATCH_FOLDER = EXCEL_FOLDER_PATH  # alias kept for backwards-compatibility
 EXCEL_FILENAME = config('EXCEL_FILENAME', default='CONTROLE DE PAGAMENTO 2025.xlsm')
+
+# Logging — show INFO-level messages from the file watcher in the dev-server console
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {
+            'format': '[%(asctime)s] %(levelname)s %(name)s: %(message)s',
+            'datefmt': '%H:%M:%S',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'loggers': {
+        'apps.excel_processor': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
 
 # REST Framework
 REST_FRAMEWORK = {
