@@ -12,26 +12,29 @@ logger = logging.getLogger(__name__)
 
 def desativar_arquivo(filepath: str):
     """
-    Mark an ExcelFile record as inactive when the file has been deleted or moved.
+    Delete an ExcelFile record (and its related sheets/rows) when the file has been
+    deleted or moved from the watched folder.
     Records a deletion event in SyncHistory.
     """
     from apps.core.models import ExcelFile, SyncHistory
     from datetime import datetime, timezone
 
-    excel_file = ExcelFile.objects.filter(filepath=filepath, is_active=True).first()
+    excel_file = ExcelFile.objects.filter(filepath=filepath).first()
     if excel_file:
-        excel_file.is_active = False
-        excel_file.save(update_fields=['is_active'])
-        logger.info(f'Deactivated ExcelFile record for deleted file: {filepath}')
+        filename = excel_file.filename  # capture before deletion
+        excel_file.delete()  # cascades to ExcelSheet and ExcelRow; SyncHistory FK becomes NULL
+        logger.info(f'Deleted ExcelFile record for removed file: {filepath}')
         SyncHistory.objects.create(
-            excel_file=excel_file,
+            excel_file=None,
             status='success',
             trigger='file_deleted',
+            # Store the filename in error_message for traceability since the FK is gone
+            error_message=f'Deleted: {filename} ({filepath})',
             finished_at=datetime.now(tz=timezone.utc),
             duration_seconds=0,
         )
     else:
-        logger.debug(f'No active ExcelFile record found for deleted path: {filepath}')
+        logger.debug(f'No ExcelFile record found for deleted path: {filepath}')
 
 
 def _cell_value(value):
